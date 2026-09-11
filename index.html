@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>LIDAR Cerezo de Abajo - MDT sobre mapa</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2c3e50">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LIDAR Cerezo">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="caminos_historicos.js?v=2"></script>
+<style>
+  html, body { margin:0; padding:0; height:100%; font-family: -apple-system, sans-serif; }
+  #map { position:absolute; top:0; bottom:0; left:0; right:0; }
+  .panel {
+    position:absolute; top:10px; right:10px; z-index:1000;
+    background:rgba(255,255,255,0.95); padding:12px 14px; border-radius:8px;
+    box-shadow:0 1px 6px rgba(0,0,0,0.3); font-size:13px; width:230px;
+  }
+  .panel label { display:block; margin-top:8px; }
+  .panel input[type=range] { width:100%; }
+  .panel h3 { margin:0 0 6px 0; font-size:14px; }
+  .panel hr { margin:10px 0; border:none; border-top:1px solid #ddd; }
+  .grupo-capas { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+    color:#888; margin:9px 0 3px; }
+  .leaflet-control-layers-base .grupo-capas:first-child { margin-top:0; }
+  .clave { background:rgba(255,255,255,.92); padding:6px 9px; border-radius:7px; font-size:11px;
+    line-height:1.5; box-shadow:0 1px 5px rgba(0,0,0,.3); }
+  .clave b { display:block; margin-bottom:3px; font-size:11px; }
+  .clave i { display:inline-block; width:11px; height:11px; margin-right:5px; vertical-align:-1px;
+    border-radius:2px; opacity:.85; }
+  .clave i + i, .clave br { }
+  .hillshade-blend { mix-blend-mode: multiply; }
+  .panel h3 { cursor:pointer; user-select:none; }
+  .panel h3::after { content:" ▾"; font-size:12px; opacity:.6; }
+  .panel.collapsed h3::after { content:" ▸"; }
+  .panel.collapsed > :not(h3) { display:none; }
+  .panel.collapsed { padding:8px 12px; width:auto; }
+  @media (max-width: 700px) {
+    .panel { top:10px; right:10px; width:200px; font-size:12px; }
+    .leaflet-control-layers-expanded { max-height:60vh; overflow:auto; font-size:13px; }
+    .leaflet-control-layers-toggle { width:44px !important; height:44px !important; }
+  }
+
+  /* --- GPS / navegacion --- */
+  .gpsbtn { position:absolute; right:12px; bottom:86px; z-index:1001; width:52px; height:52px;
+    border-radius:50%; border:none; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.35);
+    font-size:24px; line-height:52px; text-align:center; cursor:pointer; padding:0; }
+  .gpsbtn.on { background:#2980b9; color:#fff; }
+  .gpsbtn.follow { background:#27ae60; color:#fff; }
+  .gpschip { position:absolute; right:12px; bottom:146px; z-index:1001; display:none;
+    background:rgba(20,20,20,.85); color:#fff; border-radius:14px; padding:5px 10px;
+    font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.35); white-space:nowrap; }
+  @media (max-width: 700px) { .gpschip { bottom:156px; } }
+  .gpshelp { position:absolute; left:10px; right:10px; top:60px; z-index:1002; display:none;
+    background:#fff; border-radius:10px; padding:14px 16px; font-size:13px; line-height:1.45;
+    box-shadow:0 4px 16px rgba(0,0,0,.35); max-width:420px; margin:0 auto; }
+  .gpshelp.on { display:block; }
+  .gpshelp h4 { margin:0 0 8px 0; font-size:14px; }
+  .gpshelp ol { margin:6px 0 0 18px; padding:0; }
+  .gpshelp li { margin-bottom:5px; }
+  .gpshelp button { margin-top:10px; background:#2980b9; color:#fff; border:none;
+    border-radius:6px; padding:7px 12px; font-size:13px; }
+  .panel button.mini { font-size:12px; padding:5px 8px; border-radius:6px; border:1px solid #ccc;
+    background:#f7f7f7; cursor:pointer; margin-top:6px; width:100%; }
+  #dlprog { font-size:11px; opacity:.75; }
+  @media (max-width: 700px) { .gpsbtn { bottom:96px; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h3>MDT LIDAR 2025</h3>
+  <label><input type="checkbox" id="onlyLidar"><b>Solo LIDAR</b> (ocultar mapa base)</label>
+  <hr>
+  <label>Opacidad sombreado: <span id="opval">90%</span></label>
+  <input type="range" id="opacity" min="0" max="100" value="90">
+  <label><input type="checkbox" id="toggle" checked> Mostrar sombreado</label>
+  <label><input type="checkbox" id="blend" checked> Mezcla "multiply" (mas nitido)</label>
+  <hr>
+  <label>Ultimo clic: <span id="coords" style="user-select:text;font-family:ui-monospace,monospace">-</span></label>
+  <hr>
+  <label><b>Sobre el terreno</b></label>
+  <div id="gpsinfo" style="font-family:ui-monospace,monospace;font-size:12px">GPS apagado</div>
+  <button class="mini" id="dlOffline">Guardar mapa sin cobertura</button>
+  <div id="dlprog"></div>
+</div>
+<div class="gpschip" id="gpschip"></div>
+<div class="gpshelp" id="gpshelp">
+  <h4>El movil no deja usar la ubicacion</h4>
+  <b>iPhone (Safari):</b>
+  <ol>
+    <li>Ajustes &rsaquo; Privacidad y seguridad &rsaquo; Localizacion: encendida.</li>
+    <li>Ahi mismo, baja a <b>Safari</b> (o <b>Sitios web de Safari</b>) y pon <b>"Al usar la app"</b> + <b>Ubicacion precisa</b>.</li>
+    <li>Vuelve a esta pagina, toca el icono de la <b>izquierda de la direccion</b> &rsaquo; <b>Ajustes de la web</b> &rsaquo; <b>Ubicacion: Preguntar</b>.</li>
+    <li>Recarga y vuelve a tocar el boton azul.</li>
+  </ol>
+  <b>Android (Chrome):</b> candado junto a la direccion &rsaquo; Permisos &rsaquo; Ubicacion &rsaquo; Permitir.
+  <button id="gpshelpclose">Entendido</button>
+</div>
+<button class="gpsbtn" id="gpsbtn" title="Mi posicion">&#9678;</button>
+<script>
+var map = L.map('map', { zoomSnap: 0.25 }).setView([41.2124, -3.5905], 14);
+
+var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  maxZoom: 17,
+  attribution: '&copy; OpenStreetMap contributors, SRTM | &copy; OpenTopoMap (CC-BY-SA)'
+});
+
+var esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Tiles &copy; Esri'
+});
+
+var pnoaOrtho = L.tileLayer.wms('https://www.ign.es/wms-inspire/pnoa-ma', {
+  layers: 'OI.OrthoimageCoverage',
+  format: 'image/jpeg',
+  transparent: false,
+  version: '1.3.0',
+  maxZoom: 20,
+  attribution: 'PNOA &copy; Instituto Geografico Nacional de Espana'
+});
+
+
+var toponimos = L.tileLayer('https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=IGNBaseOrto&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png', {
+  maxZoom: 19,
+  attribution: 'IGN BaseOrto (toponimos)'
+});
+
+
+var vueloAmericano = L.tileLayer.wms('https://www.ign.es/wms/pnoa-historico', {
+  layers: 'AMS_1956-1957',
+  format: 'image/png',
+  transparent: false,
+  version: '1.3.0',
+  maxZoom: 19,
+  attribution: 'Vuelo Americano 1956-57 (IGN)'
+});
+
+
+var vueloInterministerial = L.tileLayer.wms('https://www.ign.es/wms/pnoa-historico', {
+  layers: 'Interministerial_1973-1986',
+  format: 'image/png',
+  transparent: false,
+  version: '1.3.0',
+  maxZoom: 19,
+  attribution: 'Vuelo Interministerial 1973-86 (IGN)'
+});
+
+var planimetrias = L.tileLayer.wms('https://www.ign.es/wms/minutas-cartograficas', {
+  layers: 'Minutas', format: 'image/png', transparent: false, version: '1.3.0', maxZoom: 19,
+  attribution: 'Planimetrías 1870-1950 (IGN)'
+});
+var catastrones = L.tileLayer.wms('https://www.ign.es/wms/primera-edicion-mtn', {
+  layers: 'catastrones', format: 'image/png', transparent: false, version: '1.3.0', maxZoom: 19,
+  attribution: 'Minutas MTN50 / catastrones 1910-1970 (IGN)'
+});
+var mtn50ed1 = L.tileLayer.wms('https://www.ign.es/wms/primera-edicion-mtn', {
+  layers: 'MTN50', format: 'image/png', transparent: false, version: '1.3.0', maxZoom: 19,
+  attribution: 'Primera edición MTN50 (IGN)'
+});
+var mtn25ed1 = L.tileLayer.wms('https://www.ign.es/wms/primera-edicion-mtn', {
+  layers: 'MTN25', format: 'image/png', transparent: false, version: '1.3.0', maxZoom: 19,
+  attribution: 'Primera edición MTN25 (IGN)'
+});
+var sigpac = L.tileLayer.wms('https://www.ign.es/wms/pnoa-historico', {
+  layers: 'SIGPAC', format: 'image/png', transparent: false, version: '1.3.0', maxZoom: 19,
+  attribution: 'Vuelo SIGPAC 1997-2003 (IGN)'
+});
+var viasPecuarias = L.tileLayer.wms('https://idecyl.jcyl.es/geoserver/montes/wms', {
+  layers: 'znie_cyl_vvpp_ejes', format: 'image/png', transparent: true, version: '1.1.1', maxZoom: 19,
+  pane: 'vpPane', attribution: 'Vías pecuarias (JCyL / IDECyL)'
+});
+var bounds = [[41.18055077118231, -3.64472352314996], [41.27123059868106, -3.52461518197825]];
+map.createPane('vpPane'); map.getPane('vpPane').style.zIndex = 360;
+map.createPane('hillshadePane'); map.getPane('hillshadePane').style.zIndex = 350;
+var hillshade = L.tileLayer('tiles/{z}/{x}/{y}.png', { pane: 'hillshadePane', minZoom: 9, minNativeZoom: 10, maxNativeZoom: 17, maxZoom: 19, bounds: bounds, opacity: 0.9, className: 'hillshade-blend', attribution: 'MDT LIDAR PNOA 2025 (IGN)' }).addTo(map);
+// caminos históricos y vías pecuarias: parcelas del Catastro (lista de pueblosrojos.com)
+var caminosColor = { 'cañada': '#c0392b', 'cordel': '#e67e22', 'vereda': '#f1c40f', 'camino': '#8e44ad' };
+var caminos = L.geoJSON(null, {
+  style: function(f) { var c = caminosColor[f.properties.clase] || '#8e44ad'; return { color: c, weight: 2, fillColor: c, fillOpacity: 0.35 }; },
+  onEachFeature: function(f, l) {
+    var p = f.properties;
+    l.bindPopup('<b>' + p.nombre + '</b><br>' + p.tipo + ' (' + p.clase + ') · ' + p.municipio + '<br>Parcela ' + p.ref + (p.area_m2 ? ' · ' + p.area_m2.toLocaleString('es') + ' m²' : '') + '<br><small>' + p.fuente + '</small>');
+    l.bindTooltip(p.nombre, { sticky: true });
+  }
+});
+caminos.addData(typeof CAMINOS !== 'undefined' ? CAMINOS : { type: 'FeatureCollection', features: [] });
+function fichaCamino(p) {
+  var nc = (p.nombre_catastro && p.nombre_catastro.toUpperCase() !== p.nombre.toUpperCase()) ? '<br><small>Catastro: ' + p.nombre_catastro + '</small>' : '';
+  return '<b>' + p.nombre + '</b>' + nc + '<br>' + p.tipo + (p.clase && p.clase !== 'camino' ? ' (' + p.clase + ')' : '') + ' · ' + p.municipio + (p.pueblo ? ' (' + p.pueblo + ')' : '') + '<br>Parcela ' + p.ref + (p.area_m2 ? ' · ' + p.area_m2.toLocaleString('es') + ' m²' : '') + '<br><small>' + p.fuente + '</small>';
+}
+caminos.eachLayer(function(l) { l.bindPopup(fichaCamino(l.feature.properties)); });
+// resto de caminos públicos del Catastro (todas las parcelas de dominio público tipo camino)
+var caminosPublicos = L.geoJSON(typeof CAMINOS_PUBLICOS !== 'undefined' ? CAMINOS_PUBLICOS : { type: 'FeatureCollection', features: [] }, {
+  style: { color: '#2c7fb8', weight: 1.5, fillColor: '#2c7fb8', fillOpacity: 0.3 },
+  onEachFeature: function(f, l) { l.bindPopup(fichaCamino(f.properties)); l.bindTooltip(f.properties.nombre, { sticky: true }); }
+});
+
+var isMobile = window.matchMedia('(max-width: 700px)').matches;
+var marcadores = L.layerGroup().addTo(map);
+var layersCtl = L.control.layers(
+  { "Ortofoto PNOA": pnoaOrtho, "Vuelo americano 1956-57": vueloAmericano, "Vuelo interministerial 1973-86": vueloInterministerial, "Vuelo SIGPAC 1997-2003": sigpac, "Planimetrías 1870-1950": planimetrias, "Minutas MTN50 1910-70": catastrones, "1ª edición MTN50": mtn50ed1, "1ª edición MTN25": mtn25ed1, "OpenStreetMap": osm, "OpenTopoMap": topo, "Satélite (Esri)": esriSat },
+  { "Sombreado LIDAR 2025": hillshade, "Marcadores": marcadores, "Caminos y vías pecuarias · Catastro": caminos, "Otros caminos públicos · Catastro": caminosPublicos, "Vías pecuarias oficiales · JCyL": viasPecuarias, "Topónimos (IGN)": toponimos },
+  { collapsed: isMobile, position: 'bottomright' }
+).addTo(map);
+var GRUPOS = { 'Ortofoto PNOA':'Fotos aéreas', 'Planimetrías 1870-1950':'Mapas antiguos', 'OpenStreetMap':'Mapas actuales' };
+function ponTitulos(){
+  var cont = layersCtl.getContainer();
+  if(!cont) return;
+  cont.querySelectorAll('.leaflet-control-layers-base label').forEach(function(lb){
+    var g = GRUPOS[lb.textContent.trim()];
+    if(!g) return;
+    var prev = lb.previousElementSibling;
+    if(prev && prev.className === 'grupo-capas') return;
+    var h = document.createElement('div');
+    h.className = 'grupo-capas';
+    h.textContent = g;
+    lb.parentNode.insertBefore(h, lb);
+  });
+}
+ponTitulos();
+// Leaflet reconstruye la lista cada vez que se enciende o apaga una capa
+map.on('overlayadd overlayremove baselayerchange', ponTitulos);
+
+// clave de colores de los caminos: solo cuando hay alguna capa de caminos encendida
+var clave = L.control({position:'bottomleft'});
+clave.onAdd = function(){
+  var d = L.DomUtil.create('div','clave');
+  d.innerHTML = '<b>Caminos · Catastro</b>'
+    + '<div><i style="background:#c0392b"></i>Cañada</div>'
+    + '<div><i style="background:#e67e22"></i>Cordel</div>'
+    + '<div><i style="background:#f1c40f"></i>Vereda</div>'
+    + '<div><i style="background:#8e44ad"></i>Camino</div>';
+  return d;
+};
+function revisaClave(){
+  var hay = map.hasLayer(caminos) || map.hasLayer(caminosPublicos);
+  if(hay && !clave._map) clave.addTo(map);
+  else if(!hay && clave._map) map.removeControl(clave);
+}
+map.on('overlayadd overlayremove', revisaClave);
+
+if (isMobile) {
+  // botón de cerrar dentro de la lista de capas + se cierra sola al elegir capa base
+  var lst = layersCtl.getContainer().querySelector('.leaflet-control-layers-list');
+  var closeBtn = document.createElement('div');
+  closeBtn.textContent = '✕ Cerrar capas';
+  closeBtn.style.cssText = 'text-align:right;font-weight:600;padding:2px 4px 6px;color:#555;cursor:pointer;border-bottom:1px solid #ddd;margin-bottom:6px;';
+  closeBtn.addEventListener('click', function(e){ e.stopPropagation(); layersCtl.collapse(); });
+  lst.insertBefore(closeBtn, lst.firstChild);
+  map.on('baselayerchange', function(){ layersCtl.collapse(); });
+}
+
+L.rectangle(bounds, { color: "#ff6b35", weight: 1, fill: false, dashArray: "4,4" }).addTo(map);
+
+// --- Puntos de interes historico (despoblado de Cerezo de Abajo, s. XVII) ---
+var iconDespoblado = L.divIcon({className: '', html: '<div style="background:#8e44ad;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[14,14], iconAnchor:[7,7]});
+var iconCementerio = L.divIcon({className: '', html: '<div style="background:#2c3e50;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[14,14], iconAnchor:[7,7]});
+
+L.marker([41.22090, -3.59556], {icon: iconDespoblado}).addTo(marcadores)
+  .bindPopup("<b>Recinto en microrrelieve (LIDAR)</b><br>Forma en U/ovalada de ~100x130m, muros/taludes bien marcados. Deteccion visual sobre el LIDAR, sin confirmar sobre el terreno.");
+
+L.marker([41.220210, -3.595984], {icon: iconCementerio}).addTo(marcadores)
+  .bindPopup("<b>Cementerio de Cerezo de Abajo</b><br>Confirmado. Junto a el, resto de pared de calicanto (unico vestigio en pie de la supuesta iglesia antigua).");
+
+var iconBronce = L.divIcon({className: '', html: '<div style="background:#d35400;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[14,14], iconAnchor:[7,7]});
+
+L.marker([41.222972, -3.601646], {icon: iconBronce}).addTo(marcadores)
+  .bindPopup("<b>Posible yacimiento Bronce Final - Las Vinas</b><br>Parcela 13, poligono 5 (ref. catastral 40059A00500013), uso registrado Vinas de uva.<br>Sin rasgos visibles en el LIDAR (esperable: los yacimientos de dispersion de superficie no dejan relieve). A ~560m NO del recinto ovalado junto al cementerio.");
+// señales LIDAR pendientes de revisar sobre el terreno
+var iconRevisar = L.divIcon({className: '', html: '<div style="background:#16a085;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[14,14], iconAnchor:[7,7]});
+L.marker([41.227862, -3.600026], {icon: iconRevisar}).addTo(marcadores)
+  .bindPopup('<b>Hoyo con montículo (revisar)</b><br>Señal LIDAR: hoyo de unos 6 m con un montículo al lado, en la Ladera del Santo, junto a la Vereda / Itinerario de San Bartolomé (planimetría de 1900). Puede ser un pozo, un chozo hundido o una raíz arrancada.<br><small>41.227862, -3.600026</small>');
+L.marker([41.222534, -3.604331], {icon: iconRevisar}).addTo(marcadores)
+  .bindPopup('<b>Montículo de bordes cortados (revisar)</b><br>Señal LIDAR: bulto de unos 25 m con escalones de 2-3 m y un ribazo largo al norte, a 240 m al oeste de Las Viñas. Puede ser un afloramiento rocoso o un majano (acumulación de piedras de despedregar).<br><small>41.222534, -3.604331</small>');
+// despoblado documentado en el Catastro de Ensenada (1752)
+var iconDespo2 = L.divIcon({className: '', html: '<div style="background:#c0392b;width:15px;height:15px;border-radius:3px;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[15,15], iconAnchor:[7,7]});
+L.marker([41.223444, -3.641039], {icon: iconDespo2}).addTo(marcadores)
+  .bindPopup('<b>Sanchofruela — &quot;despoblado de Sanchopuebla&quot;</b><br>En 1752 el Catastro de Ensenada lo cita como el despoblado con el que lindaba Mansilla a poniente. En la planimetría de 1900 da nombre al arroyo y al itinerario nº 9; hoy es una finca en uso, con &quot;Monte de Sanchofruela&quot; al sur y &quot;Mata la Puebla&quot; al lado.<br>En el vuelo de 1956 se ve un caserío cerrado: 8-10 edificios de piedra en cuadro alrededor de un patio de unos 40 m. Hoy quedan naves modernas encima.');
+
+// cercado del Cerro Redondo / Camino de Sotillo
+var iconCercado = L.divIcon({className: '', html: '<div style="background:#e67e22;width:14px;height:14px;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.6)"></div>', iconSize:[14,14], iconAnchor:[7,7]});
+L.polygon([[41.233946,-3.610465],[41.233682,-3.609353],[41.233465,-3.609446],[41.233631,-3.610462]],
+  {color:'#e67e22', weight:2, fillOpacity:0.08}).addTo(marcadores);
+L.marker([41.233706, -3.609914], {icon: iconCercado}).addTo(marcadores)
+  .bindPopup('<b>Cercado del Cerro Redondo</b><br>Recinto rectangular de unos <b>97 x 30 m</b> (~2.900 m&sup2;) marcado en el LIDAR por un talud continuo de 0,3-0,5 m de alto y 3-4 m de ancho. Esquina noroeste en angulo recto perfecto; los lados sur y este estan mas desdibujados.<br>En el vuelo de 1956 se ve como linde con arbolado encima; en el <b>vuelo interministerial de 1973-86 aparece cerrado por los cuatro lados</b>, con las tapias como lineas claras: era un cercado de piedra en pie. Hoy es pasto con encinas y <b>ningun lindero catastral lo sigue</b>.<br>Paraje catastral <i>Camino de Sotillo</i> (poligono 1, parcela 37). En la planimetria de 1900 la zona es <i>Cerro Redondo / Ladera de Valdelagua</i>. No se ve ninguna edificacion dentro.<br><small>41.233534, -3.610103</small>');
+
+
+document.getElementById('opacity').addEventListener('input', function(e) {
+  var v = e.target.value;
+  hillshade.setOpacity(v/100);
+  document.getElementById('opval').textContent = v + '%';
+});
+document.getElementById('toggle').addEventListener('change', function(e) {
+  if (e.target.checked) { map.addLayer(hillshade); } else { map.removeLayer(hillshade); }
+});
+document.getElementById('blend').addEventListener('change', function(e) {
+  var el = hillshade.getContainer();
+  if (el) el.classList.toggle('hillshade-blend', e.target.checked);
+});
+
+// Solo LIDAR: oculta cualquier capa base (tiles/WMS) para ver el sombreado
+// a maxima fidelidad, sin que el mapa/ortofoto de debajo reste nitidez.
+// Click en el mapa: muestra las coordenadas para poder pasarmelas
+map.on('click', function(e) {
+  map.closePopup();
+  document.getElementById('coords').textContent = e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6);
+});
+
+document.getElementById('onlyLidar').addEventListener('change', function(e) {
+  var tilePane = document.querySelector('.leaflet-tile-pane');
+  if (e.target.checked) {
+    if (tilePane) tilePane.style.display = 'none';
+    map.getContainer().style.background = '#ffffff';
+  } else {
+    if (tilePane) tilePane.style.display = '';
+    map.getContainer().style.background = '';
+  }
+});
+
+(function(){
+  var panel = document.querySelector('.panel'), h = panel.querySelector('h3');
+  if (isMobile) panel.classList.add('collapsed');
+  h.addEventListener('click', function(){ panel.classList.toggle('collapsed'); });
+})();
+/* ====================== Donde estoy ====================== */
+(function(){
+  // estados:  0 apagado  |  1 encendido y siguiendo  |  2 encendido pero suelto (has movido el mapa)
+  var wid = null, modo = 0, meMarker = null, meCirc = null, meLL = null, wakeLock = null, yoMuevo = false;
+  var btn  = document.getElementById('gpsbtn');
+  var info = document.getElementById('gpsinfo');
+  var chip = document.getElementById('gpschip');
+  var ayuda = document.getElementById('gpshelp');
+
+  var iconYo = L.divIcon({className:'', iconSize:[20,20], iconAnchor:[10,10],
+    html:'<div style="width:16px;height:16px;border-radius:50%;background:#2980b9;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.6)"></div>'});
+
+  function dice(txt, malo){
+    chip.textContent = txt + (malo ? '  ⓘ' : '');
+    chip.style.display = txt ? 'block' : 'none';
+    chip.style.background = malo ? 'rgba(192,57,43,.92)' : 'rgba(20,20,20,.85)';
+    chip.style.cursor = malo ? 'pointer' : 'default';
+    chip.onclick = malo ? function(){ ayuda.classList.add('on'); } : null;
+  }
+  document.getElementById('gpshelpclose').addEventListener('click', function(){
+    ayuda.classList.remove('on');
+  });
+  function pintaBoton(){
+    btn.className = 'gpsbtn' + (modo===1 ? ' follow' : modo===2 ? ' on' : '');
+    btn.title = ['Ver donde estoy','Siguiendo mi posicion','Volver a centrar en mi'][modo];
+  }
+  function centra(){
+    if(!meLL) return;
+    yoMuevo = true;
+    map.setView(meLL, Math.max(map.getZoom(),16), {animate:true});
+    setTimeout(function(){ yoMuevo = false; }, 400);
+  }
+
+  function onPos(p){
+    meLL = L.latLng(p.coords.latitude, p.coords.longitude);
+    meLL.acc = p.coords.accuracy;
+    if(!meMarker){
+      meMarker = L.marker(meLL,{icon:iconYo, zIndexOffset:1000}).addTo(map);
+      meCirc = L.circle(meLL,{radius:meLL.acc,color:'#2980b9',weight:1,fillOpacity:.12}).addTo(map);
+      centra();
+    } else {
+      meMarker.setLatLng(meLL); meCirc.setLatLng(meLL).setRadius(meLL.acc);
+      if(modo===1) centra();
+    }
+    var alt = (p.coords.altitude!=null) ? '  ·  ' + Math.round(p.coords.altitude) + ' m alt' : '';
+    dice('GPS ±' + Math.round(meLL.acc) + ' m' + alt);
+    info.innerHTML = meLL.lat.toFixed(6) + ', ' + meLL.lng.toFixed(6) + '<br>&plusmn;' + Math.round(meLL.acc) + ' m';
+  }
+  function onErr(e){
+    var m = e.code===1 ? 'GPS bloqueado por el movil'
+          : e.code===3 ? 'GPS: sin señal todavia...' : 'GPS no disponible';
+    dice(m, e.code!==3); info.textContent = m;
+  }
+
+  function enciende(){
+    if(!navigator.geolocation){ dice('Este navegador no tiene GPS', true); return; }
+    dice('Buscando GPS...');
+    wid = navigator.geolocation.watchPosition(onPos, onErr,
+          {enableHighAccuracy:true, maximumAge:2000, timeout:30000});
+    if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){});
+  }
+  function apaga(){
+    if(wid!=null) navigator.geolocation.clearWatch(wid); wid=null;
+    if(meMarker){ map.removeLayer(meMarker); map.removeLayer(meCirc); meMarker=null; meCirc=null; }
+    meLL=null;
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock=null; }
+    dice(''); info.textContent='GPS apagado';
+  }
+
+  btn.addEventListener('click', function(){
+    if(modo===0){ modo=1; enciende(); }
+    else if(modo===2){ modo=1; centra(); }        // habias movido el mapa: vuelve a centrar
+    else { modo=0; apaga(); }                     // estaba siguiendo: apagar
+    pintaBoton();
+  });
+
+  // si arrastras el mapa a mano, deja de seguirte (pero sigue marcando donde estas)
+  map.on('dragstart zoomstart', function(){
+    if(modo===1 && !yoMuevo){ modo=2; pintaBoton(); }
+  });
+})();
+
+/* ====================== Modo sin cobertura ====================== */
+if('serviceWorker' in navigator){
+  var teniaSW = !!navigator.serviceWorker.controller, recargado = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(teniaSW && !recargado){ recargado = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    reg.update();                                   // busca version nueva al abrir
+    setInterval(function(){ reg.update(); }, 3600000);
+  }).catch(function(){});
+}
+document.getElementById('dlOffline').addEventListener('click', function(){
+  var pr = document.getElementById('dlprog'), btn = this;
+  if(!('caches' in window)){ pr.textContent='Este navegador no lo permite'; return; }
+  btn.disabled = true; pr.textContent = 'Preparando...';
+  fetch('tiles_index.json').then(function(r){ return r.json(); }).then(function(lista){
+    var extra = ['./','index.html','caminos_historicos.js?v=2','caminos_publicos.geojson',
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
+    var todo = extra.concat(lista), hecho = 0;
+    return caches.open('cerezo-lidar-v1').then(function(cache){
+      function tanda(i){
+        if(i>=todo.length) return Promise.resolve();
+        var lote = todo.slice(i, i+24).map(function(u){
+          return cache.add(new Request(u, {mode: u.indexOf('http')===0 ? 'cors':'same-origin'}))
+            .catch(function(){}).then(function(){ hecho++; });
+        });
+        return Promise.all(lote).then(function(){
+          pr.textContent = hecho + ' / ' + todo.length + ' archivos';
+          return tanda(i+24);
+        });
+      }
+      return tanda(0);
+    });
+  }).then(function(){
+    pr.textContent = 'Listo: el sombreado LIDAR ya funciona sin cobertura.';
+    btn.disabled = false; btn.textContent = 'Actualizar mapa sin cobertura';
+  }).catch(function(e){ pr.textContent = 'Fallo la descarga'; btn.disabled = false; });
+});
+
+/* ====== Al pinchar una via pecuaria oficial: ficha legal de la Junta ====== */
+map.on('click', function(e){
+  if(!map.hasLayer(viasPecuarias)) return;
+  var s = map.getSize(), b = map.getBounds();
+  var u = 'https://idecyl.jcyl.es/geoserver/montes/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo'
+        + '&LAYERS=znie_cyl_vvpp_ejes&QUERY_LAYERS=znie_cyl_vvpp_ejes&SRS=EPSG:4326'
+        + '&BBOX=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',')
+        + '&WIDTH=' + s.x + '&HEIGHT=' + s.y
+        + '&X=' + Math.round(e.containerPoint.x) + '&Y=' + Math.round(e.containerPoint.y)
+        + '&INFO_FORMAT=application/json&FEATURE_COUNT=3&BUFFER=12';
+  fetch(u).then(function(r){ return r.json(); }).then(function(j){
+    if(!j.features || !j.features.length) return;
+    var h = j.features.map(function(f){
+      var p = f.properties;
+      function fecha(d){ return d ? d.slice(6,8)+'-'+d.slice(4,6)+'-'+d.slice(0,4) : null; }
+      var t = '<b>' + (p.nombre || 'Vía pecuaria') + '</b>';
+      if(p.categoria) t += '<br>' + p.categoria;
+      if(p.tramo && p.tramo !== p.nombre) t += ' &middot; tramo <i>' + p.tramo + '</i>';
+      if(p.ancho_m) t += '<br><b>Anchura legal: ' + String(p.ancho_m).replace('.', ',') + ' m</b>';
+      if(p.longitud_m) t += '<br>' + Math.round(p.longitud_m) + ' m en ' + (p.term_munic || 'este término');
+      if(p.clasificac === 'SI'){
+        t += '<br>Clasificada';
+        if(fecha(p.fech_clasi)) t += ' el ' + fecha(p.fech_clasi);
+        var bo = fecha(p.fech_bocyl) || fecha(p.fech_boe) || fecha(p.fech_bop);
+        if(bo) t += ' (publicada ' + bo + ')';
+      }
+      if(p.codigo) t += '<br><small>Código ' + p.codigo + '</small>';
+      return t;
+    }).join('<hr style="margin:6px 0;border:none;border-top:1px solid #ddd">');
+    L.popup({maxWidth:280}).setLatLng(e.latlng)
+      .setContent(h + '<br><small style="opacity:.7">Clasificación oficial · Junta de Castilla y León</small>')
+      .openOn(map);
+  }).catch(function(){});
+});
+
+</script>
+</body>
+</html>

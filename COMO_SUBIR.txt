@@ -1,0 +1,17 @@
+Mapa LIDAR de Cerezo: version ampliada al norte (Sotillo y el Duraton) y con
+el oeste completo. 2.210 teselas, zooms 10 a 17.
+
+Para subirlo desde el Terminal del Mac:
+
+  cd ~/Documents/2026/"LiDAR 2025"/procesado/subir
+  git init -q
+  git remote add origin https://github.com/patriciadiezm/cerezo-lidar-mapa.git
+  git add -A
+  git commit -q -m "LIDAR ampliado al norte (Sotillo, Duraton) y oeste completo"
+  git push -f origin HEAD:main
+
+Usuario: patriciadiezm. Contrasena: un token personal de GitHub.
+El -f es correcto: esta copia lleva todo lo anterior mas lo nuevo.
+
+Ya lleva la cache del service worker subida a v3, asi que los navegadores que
+tengan guardada la version vieja se limpian solos.
