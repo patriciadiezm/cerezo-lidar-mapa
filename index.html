@@ -30,6 +30,8 @@
   .clave { background:rgba(255,255,255,.92); padding:6px 9px; border-radius:7px; font-size:11px;
     line-height:1.5; box-shadow:0 1px 5px rgba(0,0,0,.3); }
   .clave b { display:block; margin-bottom:3px; font-size:11px; }
+  .clave hr { margin:5px 0; border:none; border-top:1px solid #ddd; }
+  .clave small { opacity:.75; }
   .clave i { display:inline-block; width:11px; height:11px; margin-right:5px; vertical-align:-1px;
     border-radius:2px; opacity:.85; }
   .clave i + i, .clave br { }
@@ -239,17 +241,37 @@ map.on('overlayadd overlayremove baselayerchange', ponTitulos);
 var clave = L.control({position:'bottomleft'});
 clave.onAdd = function(){
   var d = L.DomUtil.create('div','clave');
-  d.innerHTML = '<b>Caminos · Catastro</b>'
-    + '<div><i style="background:#c0392b"></i>Cañada</div>'
-    + '<div><i style="background:#e67e22"></i>Cordel</div>'
-    + '<div><i style="background:#f1c40f"></i>Vereda</div>'
-    + '<div><i style="background:#8e44ad"></i>Camino</div>';
+  d.id = 'claveCaja';
   return d;
 };
+function pintaClave(){
+  var d = document.getElementById('claveCaja');
+  if(!d) return;
+  var h = '';
+  if(map.hasLayer(caminos)){
+    h += '<b>Caminos históricos · Catastro</b>'
+      + '<div><i style="background:#c0392b"></i>Cañada</div>'
+      + '<div><i style="background:#e67e22"></i>Cordel</div>'
+      + '<div><i style="background:#f1c40f"></i>Vereda</div>'
+      + '<div><i style="background:#8e44ad"></i>Camino con nombre</div>';
+  }
+  if(map.hasLayer(caminosPublicos)){
+    if(h) h += '<hr>';
+    h += '<b>Otros caminos · Catastro</b>'
+      + '<div><i style="background:#2c7fb8"></i>Camino público</div>';
+  }
+  if(map.hasLayer(viasPecuarias)){
+    if(h) h += '<hr>';
+    h += '<b>Vías pecuarias · JCyL</b>'
+      + '<div><small>trazado legal; pincha para su ficha</small></div>';
+  }
+  d.innerHTML = h;
+}
 function revisaClave(){
-  var hay = map.hasLayer(caminos) || map.hasLayer(caminosPublicos);
+  var hay = map.hasLayer(caminos) || map.hasLayer(caminosPublicos) || map.hasLayer(viasPecuarias);
   if(hay && !clave._map) clave.addTo(map);
   else if(!hay && clave._map) map.removeControl(clave);
+  pintaClave();
 }
 map.on('overlayadd overlayremove', revisaClave);
 
