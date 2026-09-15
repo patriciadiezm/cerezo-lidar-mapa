@@ -550,7 +550,7 @@ map.on('overlayadd overlayremove', function(e){
 });
 
 /* ====================== Aviso de bienvenida ====================== */
-var FORMSPREE = '';   // <-- identificador de Formspree cuando lo tengamos
+var FORMSPREE = 'mqpkrole';   // formulario de contacto (Formspree)
 
 var BIENVENIDA = '<h2>El relieve de Cerezo, sin vegetación</h2>'
   + '<p>Un láser desde avión midió el suelo del término palmo a palmo. Quitando árboles y '
@@ -588,6 +588,8 @@ var BIENVENIDA = '<h2>El relieve de Cerezo, sin vegetación</h2>'
       + '<p>Si conoces algo de lo que se ve aquí —un nombre, un camino, para qué servía— '
       + 'o quieres preguntar cualquier cosa, escríbeme.</p>'
       + '<form id="formu">'
+      + '<input type="hidden" name="_subject" value="Mapa LIDAR Cerezo — mensaje desde el mapa">'
+      + '<input type="text" name="_gotcha" tabindex="-1" autocomplete="off" style="display:none">'
       + '<label>Tu nombre <input name="nombre" autocomplete="name"></label>'
       + '<label>Tu correo, si quieres respuesta <input name="email" type="email" autocomplete="email"></label>'
       + '<label>Mensaje <textarea name="mensaje" required></textarea></label>'
