@@ -206,7 +206,10 @@ var caminosPublicos = L.geoJSON(typeof CAMINOS_PUBLICOS !== 'undefined' ? CAMINO
 });
 
 var isMobile = window.matchMedia('(max-width: 700px)').matches;
-var marcadores = L.layerGroup().addTo(map);
+// Los marcadores son notas de investigacion: apagados de entrada, para que quien
+// abra el mapa compartido no los vea. En tu propio navegador se recuerda tu eleccion.
+var marcadores = L.layerGroup();
+try { if (localStorage.getItem('marcadores') === 'si') marcadores.addTo(map); } catch(e) {}
 var layersCtl = L.control.layers(
   { "Ortofoto PNOA": pnoaOrtho, "Vuelo americano 1956-57": vueloAmericano, "Vuelo interministerial 1973-86": vueloInterministerial, "Vuelo SIGPAC 1997-2003": sigpac, "Planimetrías 1870-1950": planimetrias, "Minutas MTN50 1910-70": catastrones, "1ª edición MTN50": mtn50ed1, "1ª edición MTN25": mtn25ed1, "OpenStreetMap": osm, "OpenTopoMap": topo, "Satélite (Esri)": esriSat },
   { "Sombreado LIDAR 2025": hillshade, "Marcadores": marcadores, "Caminos y vías pecuarias · Catastro": caminos, "Otros caminos públicos · Catastro": caminosPublicos, "Vías pecuarias oficiales · JCyL": viasPecuarias, "Topónimos (IGN)": toponimos },
@@ -486,6 +489,12 @@ map.on('click', function(e){
       .setContent(h + '<br><small style="opacity:.7">Clasificación oficial · Junta de Castilla y León</small>')
       .openOn(map);
   }).catch(function(){});
+});
+
+// recuerda si dejaste los marcadores encendidos (solo en este navegador)
+map.on('overlayadd overlayremove', function(e){
+  if (e.layer !== marcadores) return;
+  try { localStorage.setItem('marcadores', map.hasLayer(marcadores) ? 'si' : 'no'); } catch(err) {}
 });
 
 </script>
