@@ -88,8 +88,10 @@
   .bprinc { background:#2980b9; color:#fff; }
   .bsec { background:#f0f0f0; color:#333; }
   .ficha label { display:block; margin-top:10px; font-size:13px; font-weight:600; }
+  /* 16px justos: por debajo de eso, Safari en iPhone hace zoom al enfocar el campo
+     y luego no lo deshace, dejando la pagina ampliada y cortada. */
   .ficha input, .ficha textarea { width:100%; box-sizing:border-box; margin-top:3px;
-    border:1px solid #ccc; border-radius:6px; padding:8px; font:inherit; font-size:14px; }
+    border:1px solid #ccc; border-radius:6px; padding:8px; font-family:inherit; font-size:16px; }
   .ficha textarea { min-height:110px; resize:vertical; }
   .ayudabtn { position:absolute; right:12px; bottom:222px; z-index:1001; width:34px; height:34px;
     border-radius:50%; border:none; background:rgba(255,255,255,.95); color:#333;
